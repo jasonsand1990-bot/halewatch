@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WhaleWatch — Live Polymarket Tracker</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: #080a0e; color: #fff; font-family: 'DM Sans', system-ui, sans-serif; min-height: 100vh; padding-bottom: 60px; }
+  .header { background: rgba(8,10,14,0.95); backdrop-filter: blur(20px); border-bottom: 1px solid rgba(255,255,255,0.06); padding: 14px 20px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 100; }
+  .logo { display: flex; align-items: center; gap: 10px; }
+  .logo-icon { width: 34px; height: 34px; border-radius: 9px; background: linear-gradient(135deg, #00ff88, #00c8ff); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .logo-title { font-weight: 800; font-size: 16px; letter-spacing: -0.5px; }
+  .logo-sub { font-size: 10px; color: #444; }
+  .header-right { display: flex; align-items: center; gap: 10px; }
+  .live-dot { width: 7px; height: 7px; border-radius: 50%; background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+  .live-dot.error { background: #ff6b6b; box-shadow: 0 0 6px #ff6b6b; }
+  .live-label { font-size: 10px; color: #00ff88; }
+  .live-label.error { color: #ff6b6b; }
+  .updated { font-size: 10px; color: #444; }
+  .btn { background: rgba(0,255,136,0.1); border: 1px solid rgba(0,255,136,0.25); color: #00ff88; font-size: 11px; font-weight: 700; padding: 5px 12px; border-radius: 20px; cursor: pointer; font-family: inherit; transition: opacity 0.15s; }
+  .btn:hover { opacity: 0.75; }
+  .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+  .container { max-width: 680px; margin: 0 auto; padding: 18px 14px; }
+  .stats { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 18px; }
+  .stat { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); border-radius: 12px; padding: 12px 16px; }
+  .stat-label { color: #555; font-size: 10px; text-transform: uppercase; letter-spacing: 1px; margin-bottom: 4px; }
+  .stat-value { font-size: 20px; font-weight: 900; font-family: monospace; }
+  .error-box { background: rgba(255,100,100,0.07); border: 1px solid rgba(255,100,100,0.18); border-radius: 10px; padding: 12px 14px; font-size: 12px; color: #ff9999; margin-bottom: 16px; }
+  .filters { display: flex; gap: 8px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter-btn { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.07); color: #777; font-size: 11px; font-weight: 700; padding: 5px 14px; border-radius: 20px; cursor: pointer; font-family: inherit; transition: all 0.15s; }
+  .filter-btn.active { background: rgba(0,255,136,0.12); border-color: rgba(0,255,136,0.35); color: #00ff88; }
+  .score-filter { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; background: rgba(255,255,255,0.03); border: 1px solid rgba(255,255,255,0.06); border-radius: 10px; padding: 10px 14px; }
+  .score-filter label { color: #555; font-size: 12px; white-space: nowrap; }
+  .score-filter input { flex: 1; accent-color: #00ff88; }
+  .score-value { color: #00ff88; font-weight: 900; font-family: monospace; min-width: 30px; font-size: 14px; }
+  .feed-meta { color: #333; font-size: 11px; margin-bottom: 10px; }
+  .trade-card { background: rgba(255,255,255,0.025); border: 1px solid rgba(255,255,255,0.07); border-radius: 14px; padding: 15px 16px; cursor: pointer; margin-bottom: 10px; position: relative; transition: border-color 0.2s; }
+  .trade-card.new { background: rgba(0,255,136,0.04); border-color: rgba(0,255,136,0.25); }
+  .new-badge { position: absolute; top: 12px; right: 12px; background: #00ff88; color: #000; font-size: 8px; font-weight: 900; padding: 2px 7px; border-radius: 20px; letter-spacing: 1.5px; }
+  .card-inner { display: flex; align-items: center; gap: 12px; }
+  .score-badge { display: flex; flex-direction: column; align-items: center; gap: 2px; min-width: 58px; }
+  .score-ring { width: 52px; height: 52px; border-radius: 50%; display: flex; align-items: center; justify-content: center; }
+  .score-num { font-size: 17px; font-weight: 900; font-family: monospace; }
+  .score-label { font-size: 8px; font-weight: 800; letter-spacing: 1.5px; }
+  .card-body { flex: 1; min-width: 0; }
+  .card-meta { display: flex; gap: 8px; margin-bottom: 5px; align-items: center; }
+  .wallet-tag { background: rgba(255,255,255,0.07); color: #999; font-size: 10px; padding: 2px 8px; border-radius: 20px; font-weight: 600; }
+  .time-tag { color: #444; font-size: 11px; }
+  .card-title { color: #eee; font-size: 13px; font-weight: 600; margin: 0 0 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding-right: 40px; }
+  .card-stats { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+  .side-tag { font-weight: 800; font-size: 12px; }
+  .size-tag { color: #ffd700; font-size: 12px; font-weight: 700; }
+  .bet-rec { text-align: right; min-width: 60px; }
+  .bet-label { color: #555; font-size: 10px; }
+  .bet-amount { color: #fff; font-size: 20px; font-weight: 900; }
+  .bet-sub { color: #444; font-size: 9px; }
+  .card-details { margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(255,255,255,0.07); display: none; }
+  .card-details.open { display: block; }
+  .detail-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+  .detail-item { background: rgba(255,255,255,0.04); border-radius: 8px; padding: 8px 10px; }
+  .detail-label { color: #555; font-size: 10px; margin-bottom: 2px; }
+  .detail-value { color: #fff; font-size: 12px; font-weight: 700; }
+  .card-actions { display: flex; gap: 8px; }
+  .action-btn { flex: 1; display: block; text-align: center; font-weight: 800; font-size: 12px; padding: 10px; border-radius: 8px; text-decoration: none; transition: opacity 0.15s; }
+  .action-btn:hover { opacity: 0.8; }
+  .action-primary { background: linear-gradient(135deg, #00ff88, #00c8ff); color: #000; }
+  .action-secondary { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); color: #fff; }
+  .empty { text-align: center; padding: 60px 0; color: #333; font-size: 13px; }
+  .empty-icon { font-size: 32px; margin-bottom: 14px; }
+  .empty-sub { color: #222; font-size: 11px; margin-top: 6px; }
+  .info-box { margin-top: 24px; padding: 14px 16px; background: rgba(0,200,255,0.04); border: 1px solid rgba(0,200,255,0.1); border-radius: 10px; font-size: 11px; color: #555; line-height: 1.8; }
+  .info-box a { color: #00c8ff; }
+  @media (max-width: 480px) { .stats { grid-template-columns: 1fr 1fr; } .detail-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="logo">
+    <div class="logo-icon">🐋</div>
+    <div>
+      <div class="logo-title">WhaleWatch</div>
+      <div class="logo-sub">Live Polymarket Signal Tracker</div>
+    </div>
+  </div>
+  <div class="header-right">
+    <div style="display:flex;align-items:center;gap:5px">
+      <div class="live-dot" id="statusDot"></div>
+      <span class="live-label" id="statusLabel">LIVE</span>
+    </div>
+    <span class="updated" id="updatedLabel"></span>
+    <button class="btn" id="refreshBtn" onclick="loadTrades()">↻ Refresh</button>
+  </div>
+</div>
+
+<div class="container">
+  <div class="stats">
+    <div class="stat">
+      <div class="stat-label">Volume Tracked</div>
+      <div class="stat-value" id="statVol" style="color:#ffd700">$0.0k</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Strong Signals</div>
+      <div class="stat-value" id="statStrong" style="color:#00ff88">0</div>
+    </div>
+    <div class="stat">
+      <div class="stat-label">Trades Found</div>
+      <div class="stat-value" id="statCount" style="color:#00c8ff">0</div>
+    </div>
+  </div>
+
+  <div class="error-box" id="errorBox" style="display:none"></div>
+
+  <div class="filters">
+    <button class="filter-btn active" onclick="setFilter('ALL',this)">All Sides</button>
+    <button class="filter-btn" onclick="setFilter('BUY',this)">▲ BUY</button>
+    <button class="filter-btn" onclick="setFilter('SELL',this)">▼ SELL</button>
+  </div>
+
+  <div class="score-filter">
+    <label>Min Score</label>
+    <input type="range" min="0" max="80" step="10" value="0" id="scoreSlider" oninput="updateScore(this.value)">
+    <span class="score-value" id="scoreVal">0+</span>
+  </div>
+
+  <div class="feed-meta" id="feedMeta"></div>
+  <div id="feed">
+    <div class="empty">
+      <div class="empty-icon">🐋</div>
+      <div>Connecting to your live backend...</div>
+      <div class="empty-sub">halewatch-production.up.railway.app</div>
+    </div>
+  </div>
+
+  <div class="info-box">
+    <strong style="color:#00c8ff">⚡ Your Backend</strong> · Powered by
+    <code style="color:#888">halewatch-production.up.railway.app</code> · Stable 24/7 ·
+    <a href="https://polymarket.com/leaderboard" target="_blank">Find more whale wallets →</a>
+  </div>
+</div>
+
+<script>
+const API = "https://halewatch-production.up.railway.app";
+const WATCHED_WALLETS = [
+  "0x6af75d4e4aaf700450efbac3708cce1665810ff1",
+  "0xfffe4013d8c2cd0387a4d60d882d7f74b84b3abe",
+  "0x8a2bff37c5b9a3e2e4b3c1d0f7e9a6b5c4d3e2f1",
+];
+const WALLET_LABELS = {
+  "0x6af75d4e4aaf700450efbac3708cce1665810ff1": "Whale #1",
+  "0xfffe4013d8c2cd0387a4d60d882d7f74b84b3abe": "Whale #2",
+  "0x8a2bff37c5b9a3e2e4b3c1d0f7e9a6b5c4d3e2f1": "Whale #3",
+};
+
+let allTrades = [];
+let sideFilter = "ALL";
+let minScore = 0;
+let seenTxs = new Set();
+let newIds = new Set();
+
+function timeAgo(ts) {
+  const diff = Date.now() - ts * 1000;
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return mins + "m ago";
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return hrs + "h ago";
+  return Math.floor(hrs / 24) + "d ago";
+}
+
+function calcConfidence(usdcSize) {
+  if (usdcSize >= 50000) return 95;
+  if (usdcSize >= 20000) return 88;
+  if (usdcSize >= 10000) return 78;
+  if (usdcSize >= 5000) return 68;
+  if (usdcSize >= 2000) return 55;
+  return 42;
+}
+
+function kellyBet(conf, bankroll = 5000) {
+  const edge = (conf / 100) - 0.5;
+  return Math.round(Math.max(0, edge * 0.5) * bankroll);
+}
+
+function scoreColor(score) {
+  if (score >= 85) return "#00ff88";
+  if (score >= 65) return "#ffd700";
+  return "#ff9944";
+}
+
+function scoreLabel(score) {
+  if (score >= 85) return "STRONG";
+  if (score >= 65) return "GOOD";
+  return "FAIR";
+}
+
+function setFilter(f, el) {
+  sideFilter = f;
+  document.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+  el.classList.add("active");
+  renderFeed();
+}
+
+function updateScore(v) {
+  minScore = Number(v);
+  document.getElementById("scoreVal").textContent = v + "+";
+  renderFeed();
+}
+
+function setStatus(isError) {
+  const dot = document.getElementById("statusDot");
+  const label = document.getElementById("statusLabel");
+  dot.className = "live-dot" + (isError ? " error" : "");
+  label.className = "live-label" + (isError ? " error" : "");
+  label.textContent = isError ? "ERROR" : "LIVE";
+}
+
+async function loadTrades() {
+  const btn = document.getElementById("refreshBtn");
+  btn.disabled = true;
+  btn.textContent = "Loading...";
+  try {
+    const url = `${API}/bulk-trades?users=${WATCHED_WALLETS.join(",")}&limit=25&minSize=500`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error("Server returned " + res.status);
+    const data = await res.json();
+    const trades = data.trades || [];
+    const fresh = trades.filter(t => !seenTxs.has(t.transactionHash));
+    fresh.forEach(t => { seenTxs.add(t.transactionHash); newIds.add(t.transactionHash); });
+    trades.forEach(t => seenTxs.add(t.transactionHash));
+    const combined = [...fresh, ...allTrades];
+    const seen = new Set();
+    allTrades = combined.filter(t => { if (seen.has(t.transactionHash)) return false; seen.add(t.transactionHash); return true; }).sort((a,b) => b.timestamp - a.timestamp).slice(0, 60);
+    setTimeout(() => { newIds = new Set(); renderFeed(); }, 12000);
+    document.getElementById("updatedLabel").textContent = "Updated just now";
+    document.getElementById("errorBox").style.display = "none";
+    setStatus(false);
+    renderFeed();
+  } catch(e) {
+    document.getElementById("errorBox").style.display = "block";
+    document.getElementById("errorBox").textContent = "⚠️ " + e.message;
+    setStatus(true);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "↻ Refresh";
+  }
+}
+
+function renderFeed() {
+  const filtered = allTrades
+    .filter(t => calcConfidence(t.usdcSize) >= minScore)
+    .filter(t => sideFilter === "ALL" || t.side === sideFilter);
+
+  const totalVol = allTrades.reduce((s,t) => s + (t.usdcSize||0), 0);
+  const strong = allTrades.filter(t => calcConfidence(t.usdcSize) >= 80).length;
+  document.getElementById("statVol").textContent = "$" + (totalVol/1000).toFixed(1) + "k";
+  document.getElementById("statStrong").textContent = strong;
+  document.getElementById("statCount").textContent = allTrades.length;
+
+  const feed = document.getElementById("feed");
+  if (filtered.length === 0) {
+    feed.innerHTML = `<div class="empty"><div class="empty-icon">🐋</div><div>${allTrades.length === 0 ? "No trades found — wallets may have no recent activity" : "No trades match your filters"}</div></div>`;
+    document.getElementById("feedMeta").textContent = "";
+    return;
+  }
+
+  document.getElementById("feedMeta").textContent = filtered.length + " signal" + (filtered.length !== 1 ? "s" : "") + " · refreshes every 30s · click to expand";
+
+  feed.innerHTML = filtered.map(t => {
+    const conf = calcConfidence(t.usdcSize);
+    const bet = kellyBet(conf);
+    const color = scoreColor(conf);
+    const isBuy = t.side === "BUY";
+    const sideColor = isBuy ? "#00ff88" : "#ff6b6b";
+    const walletLabel = WALLET_LABELS[t.trackedWallet] || (t.trackedWallet||"").slice(0,8) + "...";
+    const isNew = newIds.has(t.transactionHash);
+    return `
+      <div class="trade-card ${isNew ? "new" : ""}" onclick="toggleCard('${t.transactionHash}')">
+        ${isNew ? '<div class="new-badge">NEW</div>' : ""}
+        <div class="card-inner">
+          <div class="score-badge">
+            <div class="score-ring" style="border:2.5px solid ${color};background:${color}15;box-shadow:0 0 14px ${color}33">
+              <span class="score-num" style="color:${color}">${conf}</span>
+            </div>
+            <span class="score-label" style="color:${color}">${scoreLabel(conf)}</span>
+          </div>
+          <div class="card-body">
+            <div class="card-meta">
+              <span class="wallet-tag">${walletLabel}</span>
+              <span class="time-tag">${timeAgo(t.timestamp)}</span>
+            </div>
+            <p class="card-title">${t.title || t.market || "Unknown Market"}</p>
+            <div class="card-stats">
+              <span class="side-tag" style="color:${sideColor}">${isBuy ? "▲" : "▼"} ${t.outcome||""} @ ${Math.round((t.price||0)*100)}¢</span>
+              <span class="size-tag">🐋 $${Math.round(t.usdcSize||0).toLocaleString()}</span>
+            </div>
+          </div>
+          <div class="bet-rec">
+            <div class="bet-label">BET</div>
+            <div class="bet-amount">$${bet}</div>
+            <div class="bet-sub">suggested</div>
+          </div>
+        </div>
+        <div class="card-details" id="details-${t.transactionHash}">
+          <div class="detail-grid">
+            ${[["Confidence",conf+"/100"],["USDC Size","$"+Math.round(t.usdcSize||0).toLocaleString()],["Price",Math.round((t.price||0)*100)+"¢"],["Side",t.side||"—"],["Outcome",t.outcome||"—"],["Suggested Bet","$"+bet]].map(([l,v]) => `<div class="detail-item"><div class="detail-label">${l}</div><div class="detail-value">${v}</div></div>`).join("")}
+          </div>
+          <div class="card-actions">
+            <a href="https://polymarket.com/event/${t.eventSlug||""}" target="_blank" class="action-btn action-primary" onclick="event.stopPropagation()">↗ Open on Polymarket</a>
+            <a href="https://polymarket.com/profile/${t.trackedWallet||""}" target="_blank" class="action-btn action-secondary" onclick="event.stopPropagation()">👤 View Wallet</a>
+          </div>
+        </div>
+      </div>`;
+  }).join("");
+}
+
+function toggleCard(txHash) {
+  const details = document.getElementById("details-" + txHash);
+  if (details) details.classList.toggle("open");
+}
+
+// Start
+loadTrades();
+setInterval(loadTrades, 30000);
+</script>
+</body>
+</html>
